@@ -41,6 +41,7 @@ func main() {
 
 	log.Printf("Quota above max allowed (%d / %d): pruning files...\n", totsize, *quota)
 
+	initByAtime(len(allfiles))
 	sort.Sort(ByAtime(allfiles))
 	var (
 		pruned     int
@@ -54,7 +55,7 @@ func main() {
 		log.Printf("Deleted %s ... (%d bytes)\n", f.Name(), f.Size())
 		pruned++
 		bytespared += f.Size()
-		removeIfEmpty(f.AbsPath)
+		removeIfEmpty(path.Dir(f.AbsPath))
 	}
 	log.Printf("Deleted %d files (total: %d kB)\n", pruned, bytespared)
 }
@@ -89,7 +90,7 @@ func traverse(dir string) (files []fileInfo, size int, err error) {
 // it also calls itself recursively on the parent directory if the
 // inmost dir was deleted.
 func removeIfEmpty(dir string) {
-	files, err := ioutil.ReadDir(path.Dir(dir))
+	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		log.Printf("Error reading dir %s: %s\n", dir, err.Error())
 		return
