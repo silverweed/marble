@@ -1,4 +1,6 @@
-// Prunes old files under a directory until quota < maxquota
+// Prunes old files under a directory.
+// Activates whenever quota > maxquota
+// and deletes file until quota < minquota.
 package main
 
 import (
@@ -12,7 +14,8 @@ import (
 
 var (
 	root     = flag.String("root", "/cache/", "Cache root directory")
-	quota    = flag.Int("quota", 9728, "Max disk quota in MB")
+	minquota = flag.Int("minquota", 512, "Min disk quota in MB")
+	maxquota = flag.Int("maxquota", 1024, "Max disk quota in MB")
 	logfname = flag.String("logfile", "/var/log/marble.log", "Location of log file")
 )
 
@@ -34,12 +37,12 @@ func main() {
 	}
 
 	allfiles, totsize, err := traverse(*root)
-	if totsize < *quota {
-		log.Printf("Quota is below max allowed (%d / %d), exiting.\n", totsize, *quota)
+	if totsize < *maxquota {
+		log.Printf("Quota is below max allowed (%d / %d), exiting.\n", totsize, *maxquota)
 		return
 	}
 
-	log.Printf("Quota above max allowed (%d / %d): pruning files...\n", totsize, *quota)
+	log.Printf("Quota above max allowed (%d / %d): pruning files...\n", totsize, *maxquota)
 
 	initByAtime(len(allfiles))
 	sort.Sort(ByAtime(allfiles))
@@ -56,6 +59,9 @@ func main() {
 		pruned++
 		bytespared += f.Size()
 		removeIfEmpty(path.Dir(f.AbsPath))
+		if totsize-int(bytespared/1024) <= *minquota {
+			break
+		}
 	}
 	log.Printf("Deleted %d files (total: %d kB)\n", pruned, bytespared)
 }
