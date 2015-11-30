@@ -36,7 +36,11 @@ func main() {
 		log.SetOutput(logfile)
 	}
 
-	allfiles, totsize, err := traverse(*root)
+	allfiles, intTotsize, err := traverse(*root)
+	totsize := int(float64(intTotsize) / 1024.0 / 1024.0)
+	if err != nil {
+		log.Printf("Error while traversing: %s\n", err.Error())
+	}
 	if totsize < *maxquota {
 		log.Printf("Quota is below max allowed (%d / %d), exiting.\n", totsize, *maxquota)
 		return
@@ -58,21 +62,30 @@ func main() {
 		log.Printf("Deleted %s ... (%d bytes)\n", f.Name(), f.Size())
 		pruned++
 		bytespared += f.Size()
-		removeIfEmpty(path.Dir(f.AbsPath))
-		if totsize-int(bytespared/1024) <= *minquota {
+		if totsize-int(float64(bytespared)/1024.0/1024.0) <= *minquota {
 			break
 		}
 	}
-	log.Printf("Deleted %d files (total: %d kB)\n", pruned, bytespared)
+	log.Printf("Deleted %d files (total: %d kB)\n", pruned, int(float64(bytespared)/1024.0/1024.0))
 }
 
 // traverse recursively lists all files and directories under `dir`
 // and returns a flattened list of all files, their total size in MB
 // and an error (if occurred anywhere during the traversal)
-func traverse(dir string) (files []fileInfo, size int, err error) {
-	all, err := ioutil.ReadDir(dir)
-	if err != nil {
+func traverse(dir string) (files []fileInfo, size int64, err error) {
+	all, e := ioutil.ReadDir(dir)
+	if e != nil {
+		err = e
 		return
+	}
+
+	// Delete empty directories
+	if len(all) == 0 {
+		if err := os.Remove(dir); err == nil {
+			log.Printf("Removed empty directory %s.\n", dir)
+		} else {
+			log.Printf("Error removing %s: %s\n", dir, err.Error())
+		}
 	}
 
 	for _, file := range all {
@@ -86,24 +99,8 @@ func traverse(dir string) (files []fileInfo, size int, err error) {
 			size += s
 		} else {
 			files = append(files, fileInfo{file, path.Join(dir, file.Name())})
-			size += int(file.Size() / 1024 / 1024)
+			size += file.Size()
 		}
 	}
 	return
-}
-
-// removeIfEmpty checks if directory is empty, and deletes it if so;
-// it also calls itself recursively on the parent directory if the
-// inmost dir was deleted.
-func removeIfEmpty(dir string) {
-	files, err := ioutil.ReadDir(dir)
-	if err != nil {
-		log.Printf("Error reading dir %s: %s\n", dir, err.Error())
-		return
-	}
-	if len(files) == 0 {
-		os.Remove(dir)
-		log.Printf("Removed empty directory %s.\n", dir)
-		removeIfEmpty(path.Dir(dir))
-	}
 }
