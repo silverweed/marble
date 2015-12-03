@@ -36,11 +36,12 @@ func main() {
 		log.SetOutput(logfile)
 	}
 
-	allfiles, intTotsize, err := traverse(*root)
-	totsize := int(float64(intTotsize) / 1024.0 / 1024.0)
+	allfiles, byteTotsize, err := traverse(*root)
+	totsize := int(float64(byteTotsize) / 1024.0 / 1024.0)
 	if err != nil {
 		log.Printf("Error while traversing: %s\n", err.Error())
 	}
+
 	if totsize < *maxquota {
 		log.Printf("Quota is below max allowed (%d / %d), exiting.\n", totsize, *maxquota)
 		return
@@ -50,6 +51,7 @@ func main() {
 
 	initByAtime(len(allfiles))
 	sort.Sort(ByAtime(allfiles))
+
 	var (
 		pruned     int
 		bytespared int64
@@ -62,15 +64,15 @@ func main() {
 		log.Printf("Deleted %s ... (%d bytes)\n", f.Name(), f.Size())
 		pruned++
 		bytespared += f.Size()
-		if totsize-int(float64(bytespared)/1024.0/1024.0) <= *minquota {
+		if totsize-int(float64(bytespared)/1048576) <= *minquota {
 			break
 		}
 	}
-	log.Printf("Deleted %d files (total: %d kB)\n", pruned, int(float64(bytespared)/1024.0/1024.0))
+	log.Printf("Deleted %d files (total: %d kB)\n", pruned, int(float64(bytespared)/1024.0))
 }
 
 // traverse recursively lists all files and directories under `dir`
-// and returns a flattened list of all files, their total size in MB
+// and returns a flattened list of all files, their total size in bytes
 // and an error (if occurred anywhere during the traversal)
 func traverse(dir string) (files []fileInfo, size int64, err error) {
 	all, e := ioutil.ReadDir(dir)
