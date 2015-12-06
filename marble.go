@@ -81,15 +81,6 @@ func traverse(dir string) (files []fileInfo, size int64, err error) {
 		return
 	}
 
-	// Delete empty directories
-	if len(all) == 0 {
-		if err := os.Remove(dir); err == nil {
-			log.Printf("Removed empty directory %s.\n", dir)
-		} else {
-			log.Printf("Error removing %s: %s\n", dir, err.Error())
-		}
-	}
-
 	for _, file := range all {
 		if file.IsDir() {
 			f, s, e := traverse(path.Join(dir, file.Name()))
@@ -104,5 +95,15 @@ func traverse(dir string) (files []fileInfo, size int64, err error) {
 			size += file.Size()
 		}
 	}
+
+	// Delete empty directories
+	if len(files) == 0 {
+		if err := os.Remove(dir); err == nil {
+			log.Printf("Removed empty directory %s.\n", dir)
+		} else {
+			log.Printf("Error removing %s: %s\n", dir, err.Error())
+		}
+	}
+
 	return
 }
