@@ -5,6 +5,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
 
 	"log"
@@ -14,7 +15,6 @@ import (
 )
 
 var (
-	root     = flag.String("root", "/cache/", "Cache root directory")
 	minquota = flag.Int("minquota", 512, "Min disk quota in MB")
 	maxquota = flag.Int("maxquota", 1024, "Max disk quota in MB")
 	logfname = flag.String("logfile", "/var/log/marble.log", "Location of log file")
@@ -28,6 +28,11 @@ type fileInfo struct {
 
 func main() {
 	flag.Parse()
+	if len(flag.Args()) < 1 {
+		fmt.Printf("Usage: %s <root directories>\n", os.Args[0])
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
 
 	logfile, err := os.OpenFile(*logfname, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
 	if err != nil {
@@ -37,18 +42,24 @@ func main() {
 		log.SetOutput(logfile)
 	}
 
-	allfiles, byteTotsize, err := traverse(*root)
+	for _, root := range flag.Args() {
+		pruneDirectory(root)
+	}
+}
+
+func pruneDirectory(root string) {
+	allfiles, byteTotsize, err := traverse(root)
 	totsize := int(float64(byteTotsize) / 1024.0 / 1024.0)
 	if err != nil {
-		log.Printf("Error while traversing: %s\n", err.Error())
+		log.Printf("Error while traversing %s: %s\n", root, err.Error())
 	}
 
 	if totsize < *maxquota {
-		log.Printf("Quota is below max allowed (%d / %d), exiting.\n", totsize, *maxquota)
+		log.Printf("[%s] Quota is below max allowed (%d / %d), exiting.\n", root, totsize, *maxquota)
 		return
 	}
 
-	log.Printf("Quota above max allowed (%d / %d): pruning files...\n", totsize, *maxquota)
+	log.Printf("[%s] Quota above max allowed (%d / %d): pruning files...\n", root, totsize, *maxquota)
 
 	initByAtime(len(allfiles))
 	sort.Sort(ByAtime(allfiles))
@@ -59,17 +70,17 @@ func main() {
 	)
 	for _, f := range allfiles {
 		if err := os.Remove(f.AbsPath); err != nil {
-			log.Printf("Error deleting %s: %s\n", f.Name(), err.Error())
+			log.Printf("[%s] Error deleting %s: %s\n", root, f.Name(), err.Error())
 			continue
 		}
-		log.Printf("Deleted %s ... (%d bytes)\n", f.Name(), f.Size())
+		log.Printf("[%s] Deleted %s ... (%d bytes)\n", root, f.Name(), f.Size())
 		pruned++
 		bytespared += f.Size()
 		if totsize-int(float64(bytespared)/1048576) <= *minquota {
 			break
 		}
 	}
-	log.Printf("Deleted %d files (total: %d kB)\n", pruned, int(float64(bytespared)/1024.0))
+	log.Printf("[%s] Deleted %d files (total: %d kB)\n", root, pruned, int(float64(bytespared)/1024.0))
 }
 
 // traverse recursively lists all files and directories under `dir`
